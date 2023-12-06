@@ -10,6 +10,7 @@ import sys
 from importlib import import_module
 
 import torch
+import torch_musa
 from torch.utils.data import DataLoader
 from torch.utils.data.distributed import DistributedSampler
 
@@ -54,12 +55,13 @@ def get_argument_parser():
 
 def train(model_engine, dataloader):
     model_engine.train()
+    device = torch.device('musa')
     ave_loss = 0.0
     for step, data in enumerate(dataloader):
 
         fake_data = torch.tensor(data).long()
-        input_ids = fake_data.to(args.local_rank)
-        labels = fake_data.to(args.local_rank)
+        input_ids = fake_data.to(device)
+        labels = fake_data.to(device)
         loss = model_engine(input_ids=input_ids, labels=labels).loss
         model_engine.backward(loss)
         model_engine.step()
@@ -104,10 +106,12 @@ if __name__ == "__main__":
     seqlength = getattr(module, 'seqlength')
     batchsize = getattr(module, 'batchsize')
     datafilename = getattr(module, 'datafilename')
-    theoryflops = getattr(module, 'theoryflops')
+    # theoryflops = getattr(module, 'theoryflops')
     epochs = getattr(module, 'epochs')
     flashattn = getattr(module, 'flashattn')
 
+    torch_musa.set_device(args.local_rank)
+    
     deepspeed.init_distributed()
     model_engine = get_deepspeed_engine(args, os.path.join("llama2_7b_hf"),
                                         flashattn)
@@ -138,4 +142,4 @@ if __name__ == "__main__":
             chip_tps = whole_tps / args.nproc * args.nnodes
             print("System tokens per second: ", whole_tps)
             print("Tokens/p/s: ", chip_tps)
-            print("MFU: ", chip_tps * 7000000000.0 * 6 / theoryflops)
+            # print("MFU: ", chip_tps * 7000000000.0 * 6 / theoryflops)
